@@ -1,0 +1,378 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            color: #333;
+        }
+
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 40px;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+            button:hover {
+                background-color: #0056b3;
+            }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 40px;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #ccc;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        .details-container {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Task Management</h1>
+
+        <!-- Task Form -->
+        <h2>Add Task</h2>
+        <form id="task-form">
+            <input type="text" id="task-name" placeholder="Task Name" required />
+            <textarea id="task-description" placeholder="Task Description" required></textarea>
+            <input type="number" id="task-duration" placeholder="Total Duration (minutes)" required />
+            <button type="submit">Add Task</button>
+        </form>
+
+        <!-- Material Form -->
+        <h2>Add Material</h2>
+        <form id="material-form">
+            <input type="text" id="material-part-number" placeholder="Material" required />
+            <input type="number" id="material-manufacturer-code" placeholder="Manufacturer Code" required />
+            <input type="number" id="material-price" placeholder="Price" required />
+            <select id="material-unit-of-issue" required>
+                <option value="Piece">Piece</option>
+                <option value="Liter">Liter</option>
+                <option value="Meter">Meter</option>
+                <option value="Milliliter">Milliliter</option>
+            </select>
+            <button type="submit">Add Material</button>
+        </form>
+
+        <!-- Task Material Usage Form -->
+        <h2>Assign Material to Task</h2>
+        <form id="task-material-usage-form">
+            <select id="task-select" required>
+                <!-- Options populated by available tasks -->
+            </select>
+            <select id="material-select" required>
+                <!-- Options populated by available materials -->
+            </select>
+            <input type="number" id="assignmaterial-amount" placeholder="Amount" required />
+            <select id="assignunit-of-measurement" required>
+                <option value="Piece">Piece</option>
+                <option value="Liter">Liter</option>
+                <option value="Meter">Meter</option>
+                <option value="Milliliter">Milliliter</option>
+            </select>
+            <button type="submit">Assign Material</button>
+        </form>
+
+        <!-- Task and Material Table -->
+        <h2>Tasks and Materials</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Task Name</th>
+                        <th>Task Description</th>
+                        <th>Total Duration (mins)</th>
+                        <th>Assigned Materials</th>
+                    </tr>
+                </thead>
+                <tbody id="task-list">
+                    <!-- Task rows will be displayed here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Material List -->
+        <h2>All Materials</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Material</th>
+                        <th>Manufacturer Code</th>
+                        <th>Price</th>
+                        <th>Unit of Issue</th>
+                    </tr>
+                </thead>
+                <tbody id="material-list">
+                    <!-- Material rows will be displayed here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Details of Assigned Materials for Selected Task -->
+        <div class="details-container">
+            <h2>Details of Assigned Materials for Selected Task</h2>
+            <div id="task-details">
+                <!-- Details will be displayed here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchTasksAndMaterials();
+
+            document.getElementById('task-form').addEventListener('submit', handleTaskFormSubmit);
+            document.getElementById('material-form').addEventListener('submit', handleMaterialFormSubmit);
+            document.getElementById('task-material-usage-form').addEventListener('submit', handleTaskMaterialUsageFormSubmit);
+            document.getElementById('task-select').addEventListener('change', handleTaskSelectChange);
+        });
+
+        async function fetchTasksAndMaterials() {
+            try {
+                const [tasksResponse, materialsResponse] = await Promise.all([
+                    fetch('/api/Tasks'),
+                    fetch('/api/Materials')
+                ]);
+
+                if (!tasksResponse.ok || !materialsResponse.ok) {
+                    throw new Error('Failed to fetch data');
+                }
+
+                const [tasks, materials] = await Promise.all([
+                    tasksResponse.json(),
+                    materialsResponse.json()
+                ]);
+
+                populateDropdowns(tasks, materials);
+                displayTasks(tasks);
+                displayMaterials(materials);
+            } catch (error) {
+                console.error('Error fetching data:', error.message);
+            }
+        }
+
+        function populateDropdowns(tasks, materials) {
+            const taskSelect = document.getElementById('task-select');
+            taskSelect.innerHTML = tasks.map(task => `<option value="${task.id}">${task.name}</option>`).join('');
+
+            const materialSelect = document.getElementById('material-select');
+            materialSelect.innerHTML = materials.map(material => `<option value="${material.id}">${material.partNumber}</option>`).join('');
+        }
+
+        async function handleTaskFormSubmit(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('task-name').value;
+            const description = document.getElementById('task-description').value;
+            const totalDuration = parseInt(document.getElementById('task-duration').value, 10);
+
+            console.log({ name, description, totalDuration }); 
+            try {
+                const response = await fetch('/api/Tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description, totalDuration })
+                });
+
+                const responseText = await response.text();
+                console.log('Response Status:', response.status);
+                console.log('Response Text:', responseText);
+
+                if (!response.ok) {
+                    throw new Error(`Failed to add task: ${responseText}`);
+                }
+
+                alert('Task added successfully!');
+                document.getElementById('task-form').reset();
+                await fetchTasksAndMaterials();
+            } catch (error) {
+                alert('Error adding task: ' + error.message);
+                console.error('Error adding task:', error.message);
+            }
+        }
+
+
+        async function handleMaterialFormSubmit(event) {
+            event.preventDefault();
+            const partNumber = document.getElementById('material-part-number').value;
+            const manufacturerCode = parseInt(document.getElementById('material-manufacturer-code').value, 10);
+            const price = parseFloat(document.getElementById('material-price').value);
+            const unitOfIssue = document.getElementById('material-unit-of-issue').value;
+
+            try {
+                const response = await fetch('/api/Materials', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ partNumber, manufacturerCode, price, unitOfIssue })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to add material: ${await response.text()}`);
+                }
+
+                alert('Material added successfully!');
+                document.getElementById('material-form').reset(); // Clear the form
+                await fetchTasksAndMaterials(); // Refresh data
+            } catch (error) {
+                alert('Error adding material: ' + error.message);
+                console.error('Error adding material:', error.message);
+            }
+        }
+
+        async function handleTaskMaterialUsageFormSubmit(event) {
+            event.preventDefault();
+            const taskID = document.getElementById('task-select').value;
+            const materialID = document.getElementById('material-select').value;
+            const amount = parseInt(document.getElementById('assignmaterial-amount').value, 10);
+            const unitOfMeasurement = document.getElementById('assignunit-of-measurement').value;
+
+            try {
+                const response = await fetch('/api/Tasks/AssignMaterial', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskID, materialID, amount, unitOfMeasurement })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to assign material: ${await response.text()}`);
+                }
+
+                alert('Material assigned to task successfully!');
+                document.getElementById('task-material-usage-form').reset(); // Clear the form
+                await fetchTasksAndMaterials(); // Refresh data
+            } catch (error) {
+                alert('Error assigning material: ' + error.message);
+                console.error('Error assigning material:', error.message);
+            }
+        }
+
+        async function handleTaskSelectChange(event) {
+            const taskId = event.target.value;
+
+            try {
+                const response = await fetch(`/api/Tasks/${taskId}`);
+                if (!response.ok) throw new Error('Failed to fetch task details');
+
+                const task = await response.json();
+                displayTaskDetails(task);
+            } catch (error) {
+                console.error('Error fetching task details:', error.message);
+            }
+        }
+
+        function displayTasks(tasks) {
+            const taskListTbody = document.getElementById('task-list');
+            taskListTbody.innerHTML = tasks.map(task => {
+                const materialList = task.taskMaterialUsages.map(usage =>
+                    `<li>${usage.material.partNumber} - ${usage.amount} ${usage.unitOfMeasurement}</li>`
+                ).join('');
+
+                return `
+                            <tr>
+                                <td>${task.name}</td>
+                                <td>${task.description}</td>
+                                <td>${task.totalDuration} mins</td>
+                                <td><ul style="padding-left: 15px; list-style-type: disc;">${materialList}</ul></td>
+                            </tr>
+                        `;
+            }).join('');
+        }
+
+        function displayMaterials(materials) {
+            const materialListTbody = document.getElementById('material-list');
+            materialListTbody.innerHTML = materials.map(material => `
+                        <tr>
+                            <td>${material.partNumber}</td>
+                            <td>${material.manufacturerCode}</td>
+                            <td>$${material.price.toFixed(2)}</td>
+                            <td>${material.unitOfIssue}</td>
+                        </tr>
+                    `).join('');
+        }
+
+        function displayTaskDetails(task) {
+            const taskDetailsDiv = document.getElementById('task-details');
+            const materialList = task.taskMaterialUsages.map(usage =>
+                `<li>${usage.material.partNumber} - ${usage.amount} ${usage.unitOfMeasurement}</li>`
+            ).join('');
+
+            taskDetailsDiv.innerHTML = `
+                        <h3>${task.name}</h3>
+                        <p><strong>Description:</strong> ${task.description}</p>
+                        <p><strong>Total Duration:</strong> ${task.totalDuration} mins</p>
+                        <h4>Assigned Materials:</h4>
+                        <ul style="padding-left: 15px; list-style-type: disc;">
+                            ${materialList}
+                        </ul>
+                    `;
+        }
+    </script>
+
+</body>
+
+</html>
